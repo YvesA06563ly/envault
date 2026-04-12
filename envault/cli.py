@@ -1,23 +1,27 @@
-"""CLI entry point for envault."""
+"""CLI entry-point for envault."""
+
+from __future__ import annotations
 
 import click
-from pathlib import Path
 
 from envault.vault import Vault
+from envault.rotation import rotate_secret, last_rotated, needs_rotation
 
 
-def _get_passphrase(ctx: click.Context) -> str:
-    return click.prompt("Vault passphrase", hide_input=True)
+def _get_passphrase(confirm: bool = False) -> str:
+    passphrase = click.prompt("Passphrase", hide_input=True)
+    if confirm:
+        click.prompt("Confirm passphrase", hide_input=True, confirmation_prompt=True)
+    return passphrase
 
 
 @click.group()
-@click.option("--vault", "vault_path", default=".envault/vault.enc",
-              show_default=True, help="Path to the vault file.")
+@click.option("--vault-path", default=".envault", show_default=True, help="Path to vault directory.")
 @click.pass_context
 def cli(ctx: click.Context, vault_path: str) -> None:
-    """envault — secure environment secret manager."""
+    """envault — secure secret management CLI."""
     ctx.ensure_object(dict)
-    ctx.obj["vault"] = Vault(Path(vault_path))
+    ctx.obj["vault_path"] = vault_path
 
 
 @cli.command("set")
@@ -25,11 +29,11 @@ def cli(ctx: click.Context, vault_path: str) -> None:
 @click.argument("value")
 @click.pass_context
 def set_secret(ctx: click.Context, key: str, value: str) -> None:
-    """Store or update a secret KEY=VALUE in the vault."""
-    vault: Vault = ctx.obj["vault"]
-    passphrase = _get_passphrase(ctx)
-    vault.set_secret(key, value, passphrase)
-    click.echo(f"✓ Secret '{key}' saved.")
+    """Store a secret KEY=VALUE in the vault."""
+    passphrase = _get_passphrase()
+    vault = Vault(ctx.obj["vault_path"], passphrase)
+    vault.set(key, value)
+    click.echo(f"Secret '{key}' stored.")
 
 
 @cli.command("get")
@@ -37,37 +41,53 @@ def set_secret(ctx: click.Context, key: str, value: str) -> None:
 @click.pass_context
 def get_secret(ctx: click.Context, key: str) -> None:
     """Retrieve a secret by KEY."""
-    vault: Vault = ctx.obj["vault"]
-    passphrase = _get_passphrase(ctx)
-    secrets = vault.load(passphrase)
-    if key not in secrets:
-        raise click.ClickException(f"Key '{key}' not found in vault.")
-    click.echo(secrets[key])
+    passphrase = _get_passphrase()
+    vault = Vault(ctx.obj["vault_path"], passphrase)
+    value = vault.get(key)
+    if value is None:
+        click.echo(f"Key '{key}' not found.", err=True)
+    else:
+        click.echo(value)
 
 
 @cli.command("list")
 @click.pass_context
 def list_secrets(ctx: click.Context) -> None:
-    """List all secret keys stored in the vault."""
-    vault: Vault = ctx.obj["vault"]
-    passphrase = _get_passphrase(ctx)
-    secrets = vault.load(passphrase)
-    if not secrets:
-        click.echo("Vault is empty.")
+    """List all stored secret keys."""
+    passphrase = _get_passphrase()
+    vault = Vault(ctx.obj["vault_path"], passphrase)
+    keys = vault.keys()
+    if not keys:
+        click.echo("No secrets stored.")
     else:
-        for key in sorted(secrets):
-            click.echo(f"  {key}")
+        for key in sorted(keys):
+            click.echo(key)
 
 
-@cli.command("delete")
+@cli.command("rotate")
 @click.argument("key")
+@click.argument("new_value")
 @click.pass_context
-def delete_secret(ctx: click.Context, key: str) -> None:
-    """Delete a secret by KEY."""
-    vault: Vault = ctx.obj["vault"]
-    passphrase = _get_passphrase(ctx)
-    removed = vault.delete_secret(key, passphrase)
-    if removed:
-        click.echo(f"✓ Secret '{key}' deleted.")
+def rotate(ctx: click.Context, key: str, new_value: str) -> None:
+    """Rotate the value of KEY to NEW_VALUE and record rotation timestamp."""
+    passphrase = _get_passphrase()
+    vault = Vault(ctx.obj["vault_path"], passphrase)
+    rotate_secret(vault, key, new_value)
+    click.echo(f"Secret '{key}' rotated successfully.")
+
+
+@cli.command("rotation-status")
+@click.argument("key")
+@click.option("--max-age-days", default=90, show_default=True, help="Max age in days before rotation is due.")
+@click.pass_context
+def rotation_status(ctx: click.Context, key: str, max_age_days: int) -> None:
+    """Show rotation status for KEY."""
+    passphrase = _get_passphrase()
+    vault = Vault(ctx.obj["vault_path"], passphrase)
+    ts = last_rotated(vault, key)
+    if ts is None:
+        click.echo(f"'{key}' has never been rotated.")
     else:
-        raise click.ClickException(f"Key '{key}' not found in vault.")
+        click.echo(f"'{key}' last rotated: {ts.strftime('%Y-%m-%d %H:%M:%S')} UTC")
+    due = needs_rotation(vault, key, max_age_days)
+    click.echo(f"Rotation due: {'YES' if due else 'no'}")
