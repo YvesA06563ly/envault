@@ -49,10 +49,22 @@ def test_export_dotenv_escapes_double_quotes():
     assert 'say \\"hello\\"' in result
 
 
+def test_export_dotenv_empty_value():
+    """Empty string values should produce an empty quoted assignment."""
+    result = export_dotenv({"EMPTY": ""})
+    assert 'EMPTY=""' in result
+
+
 def test_export_json_valid():
     result = export_json({"A": "1", "B": "2"})
     parsed = json.loads(result)
     assert parsed == {"A": "1", "B": "2"}
+
+
+def test_export_json_empty():
+    """An empty dict should produce a valid empty JSON object."""
+    result = export_json({})
+    assert json.loads(result) == {}
 
 
 def test_export_shell_basic():
@@ -93,6 +105,14 @@ def test_export_secrets_filter_prefix():
     assert "APP_HOST" in data
     assert "APP_PORT" in data
     assert "DB_PASS" not in data
+
+
+def test_export_secrets_filter_prefix_no_matches():
+    """A prefix that matches no keys should produce an empty export."""
+    vault = _make_vault({"APP_HOST": "localhost", "APP_PORT": "8080"})
+    out = export_secrets(vault, PASSPHRASE, fmt="json", filter_prefix="DB_")
+    data = json.loads(out)
+    assert data == {}
 
 
 def test_export_secrets_empty_vault():
