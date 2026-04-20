@@ -21,6 +21,8 @@ def quota_group():
 @click.pass_context
 def set_quota_cmd(ctx, scope: str, limit: int):
     """Set the maximum number of secrets for SCOPE."""
+    if limit < 0:
+        raise click.BadParameter("Limit must be a non-negative integer.", param_hint="'limit'")
     vault = ctx.obj["vault"]
     set_quota(vault, scope, limit)
     click.echo(f"Quota for '{scope}' set to {limit}.")
