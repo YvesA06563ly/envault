@@ -50,6 +50,14 @@ def test_set_quota_invalid_limit_raises(vault):
         set_quota(vault, "default", -5)
 
 
+def test_set_quota_non_integer_limit_raises(vault):
+    """Ensure non-integer quota limits are rejected."""
+    with pytest.raises((TypeError, ValueError)):
+        set_quota(vault, "default", "fifty")
+    with pytest.raises((TypeError, ValueError)):
+        set_quota(vault, "default", 3.5)
+
+
 def test_remove_existing_quota(vault):
     set_quota(vault, "prod", 100)
     result = remove_quota(vault, "prod")
