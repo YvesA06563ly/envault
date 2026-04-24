@@ -14,15 +14,21 @@ def namespace_group():
     """Manage secret namespaces."""
 
 
+def _load_vault(vault_path: str) -> Vault:
+    """Prompt for passphrase, load and return the vault at *vault_path*."""
+    passphrase = _get_passphrase()
+    vault = Vault(vault_path, passphrase)
+    vault.load()
+    return vault
+
+
 @namespace_group.command("assign")
 @click.argument("key")
 @click.argument("namespace")
 @click.option("--vault-path", default=".envault", show_default=True)
 def assign_cmd(key: str, namespace: str, vault_path: str):
     """Assign KEY to NAMESPACE."""
-    passphrase = _get_passphrase()
-    vault = Vault(vault_path, passphrase)
-    vault.load()
+    vault = _load_vault(vault_path)
     try:
         ns_mod.assign_namespace(vault, key, namespace)
         click.echo(f"Assigned '{key}' to namespace '{namespace}'.")
@@ -35,9 +41,7 @@ def assign_cmd(key: str, namespace: str, vault_path: str):
 @click.option("--vault-path", default=".envault", show_default=True)
 def remove_cmd(key: str, vault_path: str):
     """Remove namespace assignment for KEY."""
-    passphrase = _get_passphrase()
-    vault = Vault(vault_path, passphrase)
-    vault.load()
+    vault = _load_vault(vault_path)
     removed = ns_mod.remove_namespace(vault, key)
     if removed:
         click.echo(f"Namespace assignment removed for '{key}'.")
@@ -50,9 +54,7 @@ def remove_cmd(key: str, vault_path: str):
 @click.option("--vault-path", default=".envault", show_default=True)
 def show_cmd(key: str, vault_path: str):
     """Show namespace for KEY."""
-    passphrase = _get_passphrase()
-    vault = Vault(vault_path, passphrase)
-    vault.load()
+    vault = _load_vault(vault_path)
     ns = ns_mod.get_namespace(vault, key)
     if ns:
         click.echo(f"{key} -> {ns}")
@@ -65,9 +67,7 @@ def show_cmd(key: str, vault_path: str):
 @click.option("--vault-path", default=".envault", show_default=True)
 def list_cmd(namespace: str, vault_path: str):
     """List namespaces and their keys."""
-    passphrase = _get_passphrase()
-    vault = Vault(vault_path, passphrase)
-    vault.load()
+    vault = _load_vault(vault_path)
     if namespace:
         keys = ns_mod.keys_in_namespace(vault, namespace)
         if keys:
