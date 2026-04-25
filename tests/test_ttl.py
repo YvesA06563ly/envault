@@ -81,6 +81,12 @@ def test_list_ttls(vault):
     assert result == {"A": 100, "B": 200}
 
 
+def test_list_ttls_empty_vault(vault):
+    """list_ttls should return an empty dict when no TTLs have been set."""
+    result = list_ttls(vault)
+    assert result == {}
+
+
 def test_is_stale_when_exceeded(vault):
     set_ttl(vault, "OLD_KEY", 60)
     last_written = datetime.now(tz=timezone.utc) - timedelta(seconds=120)
@@ -107,3 +113,10 @@ def test_is_stale_naive_datetime(vault):
     set_ttl(vault, "KEY", 30)
     last_written = datetime.utcnow() - timedelta(seconds=60)
     assert is_stale(vault, "KEY", last_written) is True
+
+
+def test_set_ttl_overwrites_existing(vault):
+    """Setting a TTL for a key that already has one replaces the old value."""
+    set_ttl(vault, "API_KEY", 3600)
+    set_ttl(vault, "API_KEY", 7200)
+    assert get_ttl(vault, "API_KEY") == 7200
